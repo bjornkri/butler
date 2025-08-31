@@ -11,14 +11,12 @@ authors = [{ name = "You" }]
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-"typer>=0.12",
-"rich>=13.7",
+    "typer>=0.12",
+    "rich>=13.7",
 ]
-
 
 [project.scripts]
 butler = "butler.cli:app"
-
 
 [tool.setuptools.packages.find]
 where = ["src"]
