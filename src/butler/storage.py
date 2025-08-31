@@ -105,9 +105,17 @@ def summarize_week(entries: list[Entry], anchor: date) -> dict:
     total_drinks = sum((e.count or 0) for e in subset)
     recorded_days = sum(1 for e in subset if e.count is not None)
     abstinent_days = sum(1 for e in subset if e.count == 0)
+    
+    # Existing rules
     rule_days_ok = drinking_days <= 3
     rule_per_day_ok = all((e.count or 0) <= 3 for e in subset)
-    rule_ok = rule_days_ok and rule_per_day_ok
+    
+    # New gap rule: check for consecutive drinking days
+    rule_gap_ok = check_gap_rule(entries, start, end)
+    
+    # Overall compliance requires all rules
+    rule_ok = rule_days_ok and rule_per_day_ok and rule_gap_ok
+    
     return {
         "start": start,
         "end": end,
@@ -119,7 +127,45 @@ def summarize_week(entries: list[Entry], anchor: date) -> dict:
         "rule_ok": rule_ok,
         "rule_days_ok": rule_days_ok,
         "rule_per_day_ok": rule_per_day_ok,
+        "rule_gap_ok": rule_gap_ok,
     }
+
+
+def check_gap_rule(entries: list[Entry], week_start: date, week_end: date) -> bool:
+    """
+    Check the gap rule: at least one day between drinking days.
+    
+    Rules:
+    1. If Monday has drinks, check if previous Sunday had drinks (cross-week)
+    2. Check for consecutive drinking days within the week
+    
+    Returns True if compliant, False if consecutive drinking days found.
+    """
+    # Get all entries as a dict for easy lookup
+    all_entries = {e.day: e for e in entries}
+    
+    def has_drinks(day: date) -> bool:
+        entry = all_entries.get(day)
+        return entry is not None and (entry.count or 0) > 0
+    
+    # Check cross-week boundary: Monday drinking + previous Sunday drinking
+    monday = week_start  # week_start is always Monday
+    if has_drinks(monday):
+        previous_sunday = monday - timedelta(days=1)
+        if has_drinks(previous_sunday):
+            return False  # Non-compliant: consecutive Sunday-Monday drinking
+    
+    # Check consecutive days within the week
+    current_day = week_start
+    while current_day <= week_end:
+        if has_drinks(current_day):
+            next_day = current_day + timedelta(days=1)
+            # Only check next day if it's still within the week
+            if next_day <= week_end and has_drinks(next_day):
+                return False  # Non-compliant: consecutive drinking days
+        current_day += timedelta(days=1)
+    
+    return True  # Compliant: no consecutive drinking days found
 
 
 def month_bounds(anchor: date) -> tuple[date, date]:

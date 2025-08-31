@@ -176,7 +176,7 @@ def week(
         if e and e.count is not None:
             drinks = e.count
             if drinks == 0:
-                disp = "✨ None"
+                disp = "✨ Abstinent"
                 style = "green"
             elif drinks <= 3:
                 icons = ["", "🥂", "🍷 🍷", "🍾 🍾 🍾"]
