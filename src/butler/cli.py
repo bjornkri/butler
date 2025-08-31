@@ -10,7 +10,6 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .storage import (
-    Entry,
     ensure_store,
     find_entry,
     load_entries,
@@ -19,10 +18,48 @@ from .storage import (
 )
 
 app = typer.Typer(
-    add_completion=False, help="A dapper CLI butler that tracks your drinks 🎩"
+    add_completion=False, help="A distinguished CLI butler at your service 🎩"
 )
 console = Console()
 HAT = "🎩 "
+
+# Butler's refined vocabulary
+DRINK_ICONS = {
+    0: "🫗",  # Empty glass
+    1: "🥂",  # Single elegant glass
+    2: "🍷",  # Wine glass
+    3: "🍾",  # Champagne bottle (limit reached)
+}
+
+
+def format_drink_count(count: int) -> str:
+    """Format drink count with appropriate icon and style."""
+    if count == 0:
+        return "🫗 none at all"
+    elif count == 1:
+        return "🥂 a single libation"
+    elif count == 2:
+        return "🍷 a modest pair"
+    elif count == 3:
+        return "🍾 precisely at the limit"
+    else:
+        return f"🍻 {count} beverages ([red]exceeding propriety[/])"
+
+
+def butler_address() -> str:
+    """Polite butler address."""
+    import random
+
+    addresses = ["Sir/Madam", "Your Grace", "If I may", "Respectfully"]
+    return random.choice(addresses)
+
+
+def butler_phrase(address: str, message: str) -> str:
+    """Format a butler's message with proper address handling."""
+    if address:
+        return f"{address}, {message}"
+    else:
+        return message
 
 
 def resolve_day(yesterday: bool) -> date:
@@ -40,17 +77,38 @@ def set(
         None, "--note", help="Optional note for the day"
     ),
 ):
-    """Set drinks for today (default) or yesterday."""
+    """Record the day's libations with proper documentation."""
     day = resolve_day(yesterday)
     upsert_entry(day, n, note)
-    gt3 = n > 3
-    if gt3:
+
+    day_phrase = "yesterday's records" if yesterday else "today's ledger"
+    address = butler_address()
+
+    if n == 0:
+        message = (
+            f"I've noted abstinence for [bold]{day}[/]. 🫗 Most admirable restraint."
+        )
         console.print(
-            f"{HAT}A spirited evening! Marked [bold]{day}[/]: {n} (over the limit).",
-            style="yellow",
+            f"{HAT}{butler_phrase(address, message)}",
+            style="green",
+        )
+    elif n <= 3:
+        drink_desc = format_drink_count(n)
+        message = f"{drink_desc} recorded in {day_phrase} for [bold]{day}[/]. Quite proper indeed."
+        console.print(
+            f"{HAT}{butler_phrase(address, message)}",
+            style="green",
         )
     else:
-        console.print(f"{HAT}{n} logged for [bold]{day}[/]. Quite proper.")
+        message = f"I must note [bold]{n} beverages[/] for [bold]{day}[/] - rather spirited! 🍻"
+        console.print(
+            f"{HAT}{butler_phrase(address, message)}",
+            style="yellow",
+        )
+        console.print(
+            "    [dim]Perhaps a gentle reminder that moderation is the hallmark of distinction.[/]",
+            style="yellow",
+        )
 
 
 @app.command()
@@ -60,20 +118,32 @@ def add(
         False, "--yesterday", "-y", help="Apply to yesterday"
     ),
 ):
-    """Add N drinks to today (or yesterday)."""
+    """Add refreshments to the day's tally with refined precision."""
     day = resolve_day(yesterday)
     entries = load_entries()
     existing = find_entry(entries, day)
     current = existing.count if (existing and existing.count is not None) else 0
     new = current + n
     upsert_entry(day, new)
+
+    day_phrase = "yesterday's" if yesterday else "today's"
+    address = butler_address()
+
     if new > 3 and current <= 3:
+        message = f"we've now reached [bold]{new} beverages[/] in {day_phrase} ledger for [bold]{day}[/]."
         console.print(
-            f"{HAT}Crossed the line today: now {new} (>3). A gentle tap on the wrist.",
+            f"{HAT}{butler_phrase(address, message)}",
+            style="yellow",
+        )
+        console.print(
+            "    [dim]I do believe we've crossed into rather enthusiastic territory.[/]",
             style="yellow",
         )
     else:
-        console.print(f"{HAT}+{n} → {new} for [bold]{day}[/].")
+        increment_text = f"+{n}" if n > 1 else "another"
+        total_desc = format_drink_count(new)
+        message = f"{increment_text} noted. {total_desc} in {day_phrase} register for [bold]{day}[/]."
+        console.print(f"{HAT}{butler_phrase(address, message)}")
 
 
 @app.command()
@@ -82,46 +152,83 @@ def week(
         None, "--date", "-d", help="Any date in the week (YYYY-MM-DD)"
     ),
 ):
-    """Show the week containing today (or --date)."""
+    """Present a weekly summary with distinguished presentation."""
     anchor = date.fromisoformat(date_) if date_ else date.today()
     entries = load_entries()
     wk = summarize_week(entries, anchor)
 
-    table = Table(show_header=True, header_style="bold", box=box.SIMPLE)
-    table.add_column("Date", width=12)
-    table.add_column("Drinks", justify="right")
-    table.add_column("Note", overflow="fold")
+    # Elegant table with butler's touch
+    table = Table(
+        show_header=True,
+        header_style="bold magenta",
+        box=box.ROUNDED,
+        title="📋 Weekly Libation Registry",
+        title_style="bold blue",
+    )
+    table.add_column("Date", width=12, style="cyan")
+    table.add_column("Beverages", justify="center", width=15)
+    table.add_column("Personal Notes", overflow="fold", style="dim")
 
     d = wk["start"]
     while d <= wk["end"]:
         e = wk["days_map"].get(d)
-        if e:
-            drinks = e.count if e.count is not None else 0
-            disp = str(drinks) if drinks <= 3 else f">3 ({drinks})"
-            note = e.note
+        if e and e.count is not None:
+            drinks = e.count
+            if drinks == 0:
+                disp = "🫗 None"
+                style = "green"
+            elif drinks <= 3:
+                icons = ["", "🥂", "🍷 🍷", "🍾 🍾 🍾"]
+                disp = f"{icons[drinks]} ({drinks})" if drinks <= 3 else f"{drinks}"
+                style = "green"
+            else:
+                disp = f"🍻 {drinks} [red](over)[/]"
+                style = "yellow"
+            note = e.note if e.note else "[dim]—[/]"
         else:
-            disp = "—"
-            note = ""
-        table.add_row(d.isoformat(), disp, note)
+            disp = "[dim]— unrecorded —[/]"
+            style = "dim"
+            note = "[dim]—[/]"
+
+        day_name = d.strftime("%a")
+        date_str = f"{day_name} {d.isoformat()}"
+        table.add_row(date_str, disp, note, style=style)
         d = d + timedelta(days=1)
 
-    badge = "✅ within limits" if wk["rule_ok"] else "⚠ over limit"
-    period = f"Week {wk['start'].isoformat()} → {wk['end'].isoformat()}"
-    days = wk["drinking_days"]
-    total = wk["total_drinks"]
-    summary = f"{period}\nDrinking days: {days} (limit 3)\nTotal drinks: {total}\nRule of 3: {badge}"
-    console.print(f"{HAT}Week Summary")
+    # Distinguished summary panel
+    compliance_icon = "✅" if wk["rule_ok"] else "⚠️"
+    compliance_text = (
+        "Within proper limits" if wk["rule_ok"] else "Exceeding recommendations"
+    )
+
+    period = f"Week commencing {wk['start'].strftime('%B %d')} through {wk['end'].strftime('%B %d, %Y')}"
+    days_text = "day" if wk["drinking_days"] == 1 else "days"
+    drinks_text = "beverage" if wk["total_drinks"] == 1 else "beverages"
+
+    summary = (
+        f"[bold]{period}[/]\n\n"
+        f"📊 Drinking occasions: [bold]{wk['drinking_days']}[/] {days_text} (recommended ≤ 3)\n"
+        f"🍷 Total consumption: [bold]{wk['total_drinks']}[/] {drinks_text}\n"
+        f"{compliance_icon} Status: [bold]{compliance_text}[/]"
+    )
+
+    address = butler_address()
+    message = "here is your weekly summary:"
+    console.print(f"\n{HAT}{butler_phrase(address, message)}")
     console.print(table)
     console.print(
         Panel.fit(
-            summary, title="Summary", border_style="green" if wk["rule_ok"] else "red"
+            summary,
+            title="📈 Weekly Assessment",
+            border_style="green" if wk["rule_ok"] else "yellow",
+            title_align="left",
         )
     )
 
 
 @app.command()
 def status():
-    """Show a concise summary for today/yesterday and weekly compliance."""
+    """Present a distinguished daily and weekly summary."""
     ensure_store()
     entries = load_entries()
     today = date.today()
@@ -134,27 +241,32 @@ def status():
     c_today = count_for(today)
     c_yest = count_for(yest)
 
-    def fmt(n: int) -> str:
-        if n == 0:
-            return "none"
-        if n <= 3:
-            return f"{n} 🍷"
-        return f">3 ({n})"
-
     week = summarize_week(entries, today)
-    day_word = "day" if week["drinking_days"] == 1 else "days"
-    drink_word = "drink" if week["total_drinks"] == 1 else "drinks"
+    day_word = "occasion" if week["drinking_days"] == 1 else "occasions"
+    drink_word = "beverage" if week["total_drinks"] == 1 else "beverages"
 
+    address = butler_address()
+
+    # Today's status with refined presentation
+    today_status = format_drink_count(c_today)
+    yest_status = format_drink_count(c_yest)
+
+    message = "here is your current standing:"
+    console.print(f"\n{HAT}{butler_phrase(address, message)}")
+    console.print(f"   📅 Today's tally: [bold]{today_status}[/]")
+    console.print(f"   📰 Yesterday's record: [bold]{yest_status}[/]")
     console.print(
-        f"{HAT}Today's tally: [bold]{fmt(c_today)}[/] "
-        f"| Yesterday: [bold]{fmt(c_yest)}[/]"
+        f"   📊 This week: [bold]{week['drinking_days']}[/] drinking {day_word}, [bold]{week['total_drinks']}[/] total {drink_word}"
     )
-    console.print(
-        f"   This week: {week['drinking_days']} drinking {day_word}, total {week['total_drinks']} {drink_word}."
-    )
+
     if week["rule_ok"]:
-        console.print("   You're within the limits. Keep it up! ✅", style="green")
+        console.print(
+            "   🎖️  [green]Exemplary adherence to proper limits! Most commendable.[/]"
+        )
     else:
         console.print(
-            "   You've exceeded the limits. A gentle reminder. ⚠", style="yellow"
+            "   🧐 [yellow]I must respectfully note we've exceeded recommended bounds this week.[/]"
+        )
+        console.print(
+            "       [dim]Perhaps we might consider a more temperate approach going forward?[/]"
         )
