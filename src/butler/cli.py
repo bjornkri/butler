@@ -13,6 +13,7 @@ from .storage import (
     ensure_store,
     find_entry,
     load_entries,
+    summarize_month,
     summarize_week,
     upsert_entry,
 )
@@ -25,7 +26,7 @@ HAT = "🎩 "
 
 # Butler's refined vocabulary
 DRINK_ICONS = {
-    0: "🫗",  # Empty glass
+    0: "✨",  # Sparkles for abstinence
     1: "🥂",  # Single elegant glass
     2: "🍷",  # Wine glass
     3: "🍾",  # Champagne bottle (limit reached)
@@ -35,7 +36,7 @@ DRINK_ICONS = {
 def format_drink_count(count: int) -> str:
     """Format drink count with appropriate icon and style."""
     if count == 0:
-        return "🫗 none at all"
+        return "✨ none at all"
     elif count == 1:
         return "🥂 a single libation"
     elif count == 2:
@@ -86,7 +87,7 @@ def set(
 
     if n == 0:
         message = (
-            f"I've noted abstinence for [bold]{day}[/]. 🫗 Most admirable restraint."
+            f"I've noted abstinence for [bold]{day}[/]. ✨ Most admirable restraint."
         )
         console.print(
             f"{HAT}{butler_phrase(address, message)}",
@@ -175,7 +176,7 @@ def week(
         if e and e.count is not None:
             drinks = e.count
             if drinks == 0:
-                disp = "🫗 None"
+                disp = "✨ None"
                 style = "green"
             elif drinks <= 3:
                 icons = ["", "🥂", "🍷 🍷", "🍾 🍾 🍾"]
@@ -221,6 +222,118 @@ def week(
             summary,
             title="📈 Weekly Assessment",
             border_style="green" if wk["rule_ok"] else "yellow",
+            title_align="left",
+        )
+    )
+
+
+@app.command()
+def month(
+    date_: Optional[str] = typer.Option(
+        None, "--date", "-d", help="Any date in the month (YYYY-MM-DD)"
+    ),
+):
+    """Present a distinguished monthly summary by week."""
+    anchor = date.fromisoformat(date_) if date_ else date.today()
+    entries = load_entries()
+    month_data = summarize_month(entries, anchor)
+
+    # Elegant table showing weekly compliance
+    table = Table(
+        show_header=True,
+        header_style="bold magenta",
+        box=box.ROUNDED,
+        title="📋 Monthly Libation Overview",
+        title_style="bold blue",
+    )
+    table.add_column("Week", width=25, style="cyan")
+    table.add_column("Status", justify="center", width=20)
+    table.add_column("Days/Drinks", justify="center", width=15)
+    table.add_column("Assessment", overflow="fold", style="dim")
+
+    for i, week in enumerate(month_data["weeks"], 1):
+        week_start = week["start"].strftime("%b %d")
+        week_end = week["end"].strftime("%b %d")
+        week_range = f"Week {i}: {week_start} - {week_end}"
+
+        # Determine week status with proper distinction between no data and abstinence
+        if week["recorded_days"] == 0:
+            status = "📝 No Record"
+            status_style = "dim"
+            assessment = "No data recorded"
+        elif week["drinking_days"] == 0:
+            status = "✨ Completely Sober"
+            status_style = "bold green"
+            assessment = "Magnificent abstinence!"
+        elif week["rule_ok"]:
+            status = "✅ Compliant"
+            status_style = "green"
+            assessment = "Within proper limits"
+        else:
+            status = "⚠️ Exceeded"
+            status_style = "yellow"
+            assessment = "Rather spirited week"
+
+        days_drinks = f"{week['drinking_days']}d / {week['total_drinks']}🍷"
+
+        table.add_row(week_range, status, days_drinks, assessment, style=status_style)
+
+    # Monthly summary panel
+    month_name = month_data["month_start"].strftime("%B %Y")
+    total_weeks = len(month_data["weeks"])
+    no_record_weeks = sum(1 for w in month_data["weeks"] if w["recorded_days"] == 0)
+    sober_weeks = sum(
+        1
+        for w in month_data["weeks"]
+        if w["recorded_days"] > 0 and w["drinking_days"] == 0
+    )
+    compliant_weeks = sum(
+        1 for w in month_data["weeks"] if w["recorded_days"] > 0 and w["rule_ok"]
+    )
+    exceeded_weeks = sum(
+        1 for w in month_data["weeks"] if w["recorded_days"] > 0 and not w["rule_ok"]
+    )
+
+    # Calculate overall month status
+    recorded_weeks = total_weeks - no_record_weeks
+    if recorded_weeks == 0:
+        month_status = "📝 No Records Available"
+        month_style = "dim"
+    elif sober_weeks == recorded_weeks:
+        month_status = "✨ Completely Abstinent Month"
+        month_style = "bold green"
+    elif exceeded_weeks == 0 and recorded_weeks > 0:
+        month_status = "✅ Fully Compliant Month"
+        month_style = "green"
+    else:
+        month_status = "⚠️ Mixed Compliance Month"
+        month_style = "yellow"
+
+    days_text = "day" if month_data["total_drinking_days"] == 1 else "days"
+    drinks_text = "beverage" if month_data["total_drinks"] == 1 else "beverages"
+
+    summary = (
+        f"[bold]{month_name}[/] - {month_status}\n\n"
+        f"📊 Weekly breakdown:\n"
+        f"   📝 No records: [bold]{no_record_weeks}[/] week(s)\n"
+        f"   ✨ Completely sober: [bold]{sober_weeks}[/] week(s)\n"
+        f"   ✅ Compliant drinking: [bold]{compliant_weeks - sober_weeks}[/] week(s)\n"
+        f"   ⚠️ Exceeded limits: [bold]{exceeded_weeks}[/] week(s)\n\n"
+        f"🍷 Monthly totals:\n"
+        f"   Drinking occasions: [bold]{month_data['total_drinking_days']}[/] {days_text}\n"
+        f"   Total consumption: [bold]{month_data['total_drinks']}[/] {drinks_text}\n"
+        f"   Recorded abstinence: [bold]{month_data['sober_days']}[/] day(s)"
+    )
+
+    address = butler_address()
+    message = f"behold your monthly summary for {month_name}:"
+    console.print(f"\n{HAT}{butler_phrase(address, message)}")
+    console.print(table)
+    console.print(
+        Panel.fit(
+            summary,
+            title="📈 Monthly Assessment",
+            border_style=month_style.split()[-1] if " " in month_style else month_style,
             title_align="left",
         )
     )

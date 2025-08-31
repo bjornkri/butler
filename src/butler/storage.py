@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import csv
@@ -13,6 +12,7 @@ console = Console()
 
 DATA_DIR = Path.home() / ".butler"
 CSV_PATH = DATA_DIR / "drinks.csv"
+
 
 @dataclass
 class Entry:
@@ -59,7 +59,9 @@ def load_entries() -> list[Entry]:
     return entries
 
 
-def upsert_entry(target_day: date, count: Optional[int], note: Optional[str] = None) -> Entry:
+def upsert_entry(
+    target_day: date, count: Optional[int], note: Optional[str] = None
+) -> Entry:
     entries = load_entries()
     idx = next((i for i, e in enumerate(entries) if e.day == target_day), None)
     if idx is None:
@@ -101,6 +103,8 @@ def summarize_week(entries: list[Entry], anchor: date) -> dict:
     days_map = {e.day: e for e in subset}
     drinking_days = sum(1 for e in subset if (e.count or 0) > 0)
     total_drinks = sum((e.count or 0) for e in subset)
+    recorded_days = sum(1 for e in subset if e.count is not None)
+    abstinent_days = sum(1 for e in subset if e.count == 0)
     rule_days_ok = drinking_days <= 3
     rule_per_day_ok = all((e.count or 0) <= 3 for e in subset)
     rule_ok = rule_days_ok and rule_per_day_ok
@@ -110,7 +114,61 @@ def summarize_week(entries: list[Entry], anchor: date) -> dict:
         "days_map": days_map,
         "drinking_days": drinking_days,
         "total_drinks": total_drinks,
+        "recorded_days": recorded_days,
+        "abstinent_days": abstinent_days,
         "rule_ok": rule_ok,
         "rule_days_ok": rule_days_ok,
         "rule_per_day_ok": rule_per_day_ok,
+    }
+
+
+def month_bounds(anchor: date) -> tuple[date, date]:
+    """Get the first and last day of the month containing anchor date."""
+    first_day = anchor.replace(day=1)
+    if anchor.month == 12:
+        last_day = anchor.replace(year=anchor.year + 1, month=1, day=1) - timedelta(
+            days=1
+        )
+    else:
+        last_day = anchor.replace(month=anchor.month + 1, day=1) - timedelta(days=1)
+    return first_day, last_day
+
+
+def summarize_month(entries: list[Entry], anchor: date) -> dict:
+    """Summarize drinking data for the month containing the anchor date."""
+    month_start, month_end = month_bounds(anchor)
+    month_entries = [e for e in entries if month_start <= e.day <= month_end]
+
+    # Group entries by week
+    weeks = []
+    current_monday = month_start - timedelta(days=month_start.weekday())
+
+    while current_monday <= month_end:
+        week_end = current_monday + timedelta(days=6)
+        week_entries = [e for e in month_entries if current_monday <= e.day <= week_end]
+
+        if week_entries or (current_monday <= month_end and week_end >= month_start):
+            week_summary = summarize_week(entries, current_monday)
+            # Only include if week overlaps with the month
+            if (
+                week_summary["start"] <= month_end
+                and week_summary["end"] >= month_start
+            ):
+                weeks.append(week_summary)
+
+        current_monday += timedelta(days=7)
+
+    # Overall month statistics
+    total_drinking_days = sum(1 for e in month_entries if (e.count or 0) > 0)
+    total_drinks = sum((e.count or 0) for e in month_entries)
+    sober_days = len([e for e in month_entries if e.count == 0])
+
+    return {
+        "month_start": month_start,
+        "month_end": month_end,
+        "weeks": weeks,
+        "total_drinking_days": total_drinking_days,
+        "total_drinks": total_drinks,
+        "sober_days": sober_days,
+        "total_days_recorded": len(month_entries),
     }
