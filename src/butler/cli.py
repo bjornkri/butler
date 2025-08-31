@@ -190,8 +190,8 @@ def week(
             style = "dim"
             note = "[dim]—[/]"
 
-        day_name = d.strftime("%a")
-        date_str = f"{day_name} {d.isoformat()}"
+        day_name = d.strftime("%A")
+        date_str = f"{day_name}"
         table.add_row(date_str, disp, note, style=style)
         d = d + timedelta(days=1)
 
