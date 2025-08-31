@@ -392,20 +392,20 @@ def status():
 def edit():
     """Open the drinks data file in your default editor for manual adjustments."""
     ensure_store()  # Make sure the CSV file exists
-    
+
     address = butler_address()
     message = f"opening the ledger at {CSV_PATH} for your review..."
     console.print(f"\n{HAT}{butler_phrase(address, message)}")
-    
+
     try:
         import os
-        
+
         # Try to find a suitable text editor
         editor = None
-        
+
         # First, check environment variables
-        editor = os.environ.get('EDITOR') or os.environ.get('VISUAL')
-        
+        editor = os.environ.get("EDITOR") or os.environ.get("VISUAL")
+
         if editor:
             # Use the explicitly set editor
             subprocess.run([editor, str(CSV_PATH)], check=True)
@@ -417,7 +417,7 @@ def edit():
                 ["atom", str(CSV_PATH)],  # Atom
                 ["nano", str(CSV_PATH)],  # nano (always available)
             ]
-            
+
             success = False
             for cmd in editors_to_try:
                 try:
@@ -426,11 +426,11 @@ def edit():
                     break
                 except (subprocess.CalledProcessError, FileNotFoundError):
                     continue
-            
+
             if not success:
                 # Fall back to TextEdit (always available on macOS)
                 subprocess.run(["open", "-a", "TextEdit", str(CSV_PATH)], check=True)
-                
+
         elif sys.platform == "win32":
             # Windows - try notepad first, then system default
             try:
@@ -441,11 +441,11 @@ def edit():
             # Linux and others
             editors_to_try = [
                 ["code", str(CSV_PATH)],  # VSCode
-                ["gedit", str(CSV_PATH)], # GNOME Text Editor
+                ["gedit", str(CSV_PATH)],  # GNOME Text Editor
                 ["nano", str(CSV_PATH)],  # nano
-                ["vim", str(CSV_PATH)],   # vim
+                ["vim", str(CSV_PATH)],  # vim
             ]
-            
+
             success = False
             for cmd in editors_to_try:
                 try:
@@ -454,21 +454,17 @@ def edit():
                     break
                 except (subprocess.CalledProcessError, FileNotFoundError):
                     continue
-            
+
             if not success:
                 subprocess.run(["xdg-open", str(CSV_PATH)], check=True)
-        
-        console.print(
-            "    [dim]The ledger has been presented for your examination.[/]"
-        )
-        
+
+        console.print("    [dim]The ledger has been presented for your examination.[/]")
+
     except subprocess.CalledProcessError as e:
         console.print(
             f"    [red]I regret to inform you that opening the ledger failed: {e}[/]"
         )
-        console.print(
-            f"    [dim]You may manually access the file at: {CSV_PATH}[/]"
-        )
+        console.print(f"    [dim]You may manually access the file at: {CSV_PATH}[/]")
         console.print(
             "    [dim]Tip: Set your preferred editor with 'export EDITOR=code' (or your preferred editor)[/]"
         )
@@ -476,9 +472,29 @@ def edit():
         console.print(
             "    [red]I'm afraid no suitable application was found to open the ledger.[/]"
         )
-        console.print(
-            f"    [dim]You may manually access the file at: {CSV_PATH}[/]"
-        )
+        console.print(f"    [dim]You may manually access the file at: {CSV_PATH}[/]")
         console.print(
             "    [dim]Tip: Set your preferred editor with 'export EDITOR=code' (or your preferred editor)[/]"
         )
+
+
+@app.command()
+def interactive():
+    """Launch the interactive Butler Console for distinguished data management."""
+    try:
+        from .console import run_console
+
+        address = butler_address()
+        message = "launching the distinguished interactive console..."
+        console.print(f"\n{HAT}{butler_phrase(address, message)}")
+
+        run_console()
+
+    except ImportError as e:
+        console.print(
+            "    [red]I regret that the interactive console requires additional dependencies.[/]"
+        )
+        console.print(
+            "    [dim]Please install with: pip install textual[/]"
+        )
+        console.print(f"    [dim]Error details: {e}[/]")
