@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from datetime import date, timedelta
 from typing import Optional
 
@@ -10,6 +12,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .storage import (
+    CSV_PATH,
     ensure_store,
     find_entry,
     load_entries,
@@ -382,4 +385,100 @@ def status():
         )
         console.print(
             "       [dim]Perhaps we might consider a more temperate approach going forward?[/]"
+        )
+
+
+@app.command()
+def edit():
+    """Open the drinks data file in your default editor for manual adjustments."""
+    ensure_store()  # Make sure the CSV file exists
+    
+    address = butler_address()
+    message = f"opening the ledger at {CSV_PATH} for your review..."
+    console.print(f"\n{HAT}{butler_phrase(address, message)}")
+    
+    try:
+        import os
+        
+        # Try to find a suitable text editor
+        editor = None
+        
+        # First, check environment variables
+        editor = os.environ.get('EDITOR') or os.environ.get('VISUAL')
+        
+        if editor:
+            # Use the explicitly set editor
+            subprocess.run([editor, str(CSV_PATH)], check=True)
+        elif sys.platform == "darwin":
+            # macOS - try common editors in order of preference
+            editors_to_try = [
+                ["code", str(CSV_PATH)],  # VSCode
+                ["subl", str(CSV_PATH)],  # Sublime Text
+                ["atom", str(CSV_PATH)],  # Atom
+                ["nano", str(CSV_PATH)],  # nano (always available)
+            ]
+            
+            success = False
+            for cmd in editors_to_try:
+                try:
+                    subprocess.run(cmd, check=True)
+                    success = True
+                    break
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    continue
+            
+            if not success:
+                # Fall back to TextEdit (always available on macOS)
+                subprocess.run(["open", "-a", "TextEdit", str(CSV_PATH)], check=True)
+                
+        elif sys.platform == "win32":
+            # Windows - try notepad first, then system default
+            try:
+                subprocess.run(["notepad", str(CSV_PATH)], check=True)
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                subprocess.run(["start", str(CSV_PATH)], shell=True, check=True)
+        else:
+            # Linux and others
+            editors_to_try = [
+                ["code", str(CSV_PATH)],  # VSCode
+                ["gedit", str(CSV_PATH)], # GNOME Text Editor
+                ["nano", str(CSV_PATH)],  # nano
+                ["vim", str(CSV_PATH)],   # vim
+            ]
+            
+            success = False
+            for cmd in editors_to_try:
+                try:
+                    subprocess.run(cmd, check=True)
+                    success = True
+                    break
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    continue
+            
+            if not success:
+                subprocess.run(["xdg-open", str(CSV_PATH)], check=True)
+        
+        console.print(
+            "    [dim]The ledger has been presented for your examination.[/]"
+        )
+        
+    except subprocess.CalledProcessError as e:
+        console.print(
+            f"    [red]I regret to inform you that opening the ledger failed: {e}[/]"
+        )
+        console.print(
+            f"    [dim]You may manually access the file at: {CSV_PATH}[/]"
+        )
+        console.print(
+            "    [dim]Tip: Set your preferred editor with 'export EDITOR=code' (or your preferred editor)[/]"
+        )
+    except FileNotFoundError:
+        console.print(
+            "    [red]I'm afraid no suitable application was found to open the ledger.[/]"
+        )
+        console.print(
+            f"    [dim]You may manually access the file at: {CSV_PATH}[/]"
+        )
+        console.print(
+            "    [dim]Tip: Set your preferred editor with 'export EDITOR=code' (or your preferred editor)[/]"
         )
