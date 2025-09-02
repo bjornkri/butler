@@ -42,18 +42,18 @@ def show_butler_welcome():
 
 [dim]I am here to assist you in maintaining proper conduct with the Rule of 3:[/]
 [cyan]• No more than 3 drinking days per week[/]
-[cyan]• No more than 3 drinks per day[/]  
+[cyan]• No more than 3 drinks per day[/]
 [cyan]• Always at least one day between drinking days[/]
 
 [bold]Available Commands:[/]
 [cyan]set <n>[/]     Record drinks for today
-[cyan]add <n>[/]     Add drinks to today's tally  
+[cyan]add <n>[/]     Add drinks to today's tally
 [cyan]status[/]      View current standing
 [cyan]week[/]        Review this week's conduct
 [cyan]month[/]       Monthly compliance summary
 [cyan]edit[/]        Open records in editor
 [cyan]interactive[/] Launch interactive console"""
-    
+
     panel = Panel(
         welcome_text,
         title="🎩 Butler",
@@ -61,7 +61,7 @@ def show_butler_welcome():
         border_style="cyan",
         padding=(1, 2)
     )
-    
+
     console.print(panel)
     console.print("\n[dim]For detailed help on any command: [cyan]butler <command> --help[/][/]")
 
@@ -69,8 +69,8 @@ def show_butler_welcome():
 # Butler's refined vocabulary
 DRINK_ICONS = {
     0: "✨",  # Sparkles for abstinence
-    1: "🥂",  # Single elegant glass
-    2: "🍷",  # Wine glass
+    1: "🍷",  # Single wine glass
+    2: "🥂",  # Clinking glasses
     3: "🍾",  # Champagne bottle (limit reached)
 }
 
@@ -78,13 +78,13 @@ DRINK_ICONS = {
 def format_drink_count(count: int) -> str:
     """Format drink count with appropriate icon and style."""
     if count == 0:
-        return "✨ none at all"
+        return f"{DRINK_ICONS[0]} none at all"
     elif count == 1:
-        return "🥂 a single libation"
+        return f"{DRINK_ICONS[1]} a single libation"
     elif count == 2:
-        return "🍷 a modest pair"
+        return f"{DRINK_ICONS[2]} a modest pair"
     elif count == 3:
-        return "🍾 precisely at the limit"
+        return f"{DRINK_ICONS[3]} precisely at the limit"
     else:
         return f"🍻 {count} beverages ([red]exceeding propriety[/])"
 
@@ -103,6 +103,21 @@ def butler_phrase(address: str, message: str) -> str:
         return f"{address}, {message}"
     else:
         return message
+
+
+def butler_notify(message: str, note: Optional[str] = None, style: str = "default") -> None:
+    """Display a consistent butler notification for data changes."""
+    address = butler_address()
+    formatted_message = butler_phrase(address, message)
+
+    if style == "moderate":
+        console.print(f"{HAT}{formatted_message}", style="green")
+    elif style == "caution":
+        console.print(f"{HAT}{formatted_message}", style="yellow")
+        if note:
+            console.print(f"    [dim]{note}[/]", style="yellow")
+    else:
+        console.print(f"{HAT}{formatted_message}")
 
 
 def resolve_day(yesterday: bool) -> date:
@@ -125,33 +140,18 @@ def set(
     upsert_entry(day, n, note)
 
     day_phrase = "yesterday's records" if yesterday else "today's ledger"
-    address = butler_address()
 
     if n == 0:
-        message = (
-            f"I've noted abstinence for [bold]{day}[/]. ✨ Most admirable restraint."
-        )
-        console.print(
-            f"{HAT}{butler_phrase(address, message)}",
-            style="green",
-        )
+        message = f"[bold]abstinence[/b] noted for [bold]{day}[/]. ✨ Most admirable restraint."
+        butler_notify(message, style="moderate")
     elif n <= 3:
         drink_desc = format_drink_count(n)
-        message = f"{drink_desc} recorded in {day_phrase} for [bold]{day}[/]. Quite proper indeed."
-        console.print(
-            f"{HAT}{butler_phrase(address, message)}",
-            style="green",
-        )
+        message = f"[bold]{drink_desc}[/b] recorded for [bold]{day}[/]."
+        butler_notify(message, style="moderate")
     else:
-        message = f"I must note [bold]{n} beverages[/] for [bold]{day}[/] - rather spirited! 🍻"
-        console.print(
-            f"{HAT}{butler_phrase(address, message)}",
-            style="yellow",
-        )
-        console.print(
-            "    [dim]Perhaps a gentle reminder that moderation is the hallmark of distinction.[/]",
-            style="yellow",
-        )
+        message = f"[bold]{n} beverages[/] noted for [bold]{day}[/] - rather spirited! 🍻"
+        note = "Perhaps a gentle reminder that moderation is the hallmark of distinction."
+        butler_notify(message, note, style="caution")
 
 
 @app.command()
@@ -170,23 +170,17 @@ def add(
     upsert_entry(day, new)
 
     day_phrase = "yesterday's" if yesterday else "today's"
-    address = butler_address()
 
     if new > 3 and current <= 3:
-        message = f"we've now reached [bold]{new} beverages[/] in {day_phrase} ledger for [bold]{day}[/]."
-        console.print(
-            f"{HAT}{butler_phrase(address, message)}",
-            style="yellow",
-        )
-        console.print(
-            "    [dim]I do believe we've crossed into rather enthusiastic territory.[/]",
-            style="yellow",
-        )
+        message = f"we've now reached [bold]{new} beverages[/] for [bold]{day}[/]."
+        note = "I do believe we've crossed into rather enthusiastic territory."
+        butler_notify(message, note, style="caution")
     else:
         increment_text = f"+{n}" if n > 1 else "another"
         total_desc = format_drink_count(new)
-        message = f"{increment_text} noted. {total_desc} in {day_phrase} register for [bold]{day}[/]."
-        console.print(f"{HAT}{butler_phrase(address, message)}")
+        message = f"{increment_text} noted. {total_desc} for [bold]{day}[/]."
+        style = "moderate" if new <= 3 else "caution"
+        butler_notify(message, style=style)
 
 
 @app.command()
@@ -221,7 +215,7 @@ def week(
                 disp = "✨ Abstinent"
                 style = "green"
             elif drinks <= 3:
-                icons = ["", "🥂", "🍷 🍷", "🍾 🍾 🍾"]
+                icons = [DRINK_ICONS[i] for i in range(0, 4)]
                 disp = f"{icons[drinks]} ({drinks})" if drinks <= 3 else f"{drinks}"
                 style = "green"
             else:
