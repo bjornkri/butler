@@ -120,7 +120,29 @@ def butler_notify(message: str, note: Optional[str] = None, style: str = "defaul
         console.print(f"{HAT}{formatted_message}")
 
 
+def butler_report(title: str, content, message: str = ""):
+    """Display a consistent informational report with butler personality."""
+    address = butler_address()
+
+    if message:
+        notification_text = f"{HAT}{butler_phrase(address, message)}"
+        console.print(f"\n{notification_text}")
+
+    # Create a panel with the report content
+    panel = Panel(
+        content,
+        border_style="blue",
+        padding=(1, 2),
+        title=f"📊 {title}",
+        title_align="left"
+    )
+
+    console.print(panel)
+
+
 def resolve_day(yesterday: bool) -> date:
+    today = date.today()
+    return today - timedelta(days=1) if yesterday else today
     today = date.today()
     return today - timedelta(days=1) if yesterday else today
 
@@ -249,18 +271,23 @@ def week(
         f"{compliance_icon} Status: [bold]{compliance_text}[/]"
     )
 
+    # Display with butler_report, but need to print table separately
     address = butler_address()
     message = "here is your weekly summary:"
     console.print(f"\n{HAT}{butler_phrase(address, message)}")
+
     console.print(table)
-    console.print(
-        Panel.fit(
-            summary,
-            title="📈 Weekly Assessment",
-            border_style="green" if wk["rule_ok"] else "yellow",
-            title_align="left",
-        )
+    console.print("")  # Add some spacing
+
+    # Create a panel for the summary
+    panel = Panel(
+        summary,
+        border_style="blue",
+        padding=(1, 2),
+        title="📊 Weekly Assessment",
+        title_align="left"
     )
+    console.print(panel)
 
 
 @app.command()
@@ -361,18 +388,23 @@ def month(
         f"   Recorded abstinence: [bold]{month_data['sober_days']}[/] day(s)"
     )
 
+    # Display with butler approach, but print table separately
     address = butler_address()
     message = f"behold your monthly summary for {month_name}:"
     console.print(f"\n{HAT}{butler_phrase(address, message)}")
+
     console.print(table)
-    console.print(
-        Panel.fit(
-            summary,
-            title="📈 Monthly Assessment",
-            border_style=month_style.split()[-1] if " " in month_style else month_style,
-            title_align="left",
-        )
+    console.print("")  # Add some spacing
+
+    # Create a panel for the summary
+    panel = Panel(
+        summary,
+        border_style="blue",
+        padding=(1, 2),
+        title="📊 Monthly Assessment",
+        title_align="left"
     )
+    console.print(panel)
 
 
 @app.command()
@@ -394,31 +426,26 @@ def status():
     day_word = "occasion" if week["drinking_days"] == 1 else "occasions"
     drink_word = "beverage" if week["total_drinks"] == 1 else "beverages"
 
-    address = butler_address()
-
     # Today's status with refined presentation
     today_status = format_drink_count(c_today)
     yest_status = format_drink_count(c_yest)
 
-    message = "here is your current standing:"
-    console.print(f"\n{HAT}{butler_phrase(address, message)}")
-    console.print(f"   📅 Today's tally: [bold]{today_status}[/]")
-    console.print(f"   📰 Yesterday's record: [bold]{yest_status}[/]")
-    console.print(
-        f"   📊 This week: [bold]{week['drinking_days']}[/] drinking {day_word}, [bold]{week['total_drinks']}[/] total {drink_word}"
+    # Create status content
+    status_content = (
+        f"📅 Today's tally: [bold]{today_status}[/]\n"
+        f"📰 Yesterday's record: [bold]{yest_status}[/]\n"
+        f"📊 This week: [bold]{week['drinking_days']}[/] drinking {day_word}, [bold]{week['total_drinks']}[/] total {drink_word}\n\n"
     )
 
     if week["rule_ok"]:
-        console.print(
-            "   🎖️  [green]Exemplary adherence to proper limits! Most commendable.[/]"
-        )
+        status_content += "🎖️  [green]Exemplary adherence to proper limits! Most commendable.[/]"
     else:
-        console.print(
-            "   🧐 [yellow]I must respectfully note we've exceeded recommended bounds this week.[/]"
+        status_content += (
+            "🧐 [yellow]I must respectfully note we've exceeded recommended bounds this week.[/]\n"
+            "    [dim]Perhaps we might consider a more temperate approach going forward?[/]"
         )
-        console.print(
-            "       [dim]Perhaps we might consider a more temperate approach going forward?[/]"
-        )
+
+    butler_report("Current Standing", status_content, "here is your current standing:")
 
 
 @app.command()
