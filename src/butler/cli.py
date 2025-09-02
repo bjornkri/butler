@@ -13,6 +13,7 @@ from rich.table import Table
 
 from .storage import (
     CSV_PATH,
+    calculate_streaks,
     ensure_store,
     find_entry,
     load_entries,
@@ -49,6 +50,7 @@ def show_butler_welcome():
 [cyan]set <n>[/]     Record drinks for today
 [cyan]add <n>[/]     Add drinks to today's tally
 [cyan]status[/]      View current standing
+[cyan]streaks[/]     Review achievement records
 [cyan]week[/]        Review this week's conduct
 [cyan]month[/]       Monthly compliance summary
 [cyan]edit[/]        Open records in editor
@@ -141,8 +143,6 @@ def butler_report(title: str, content, message: str = ""):
 
 
 def resolve_day(yesterday: bool) -> date:
-    today = date.today()
-    return today - timedelta(days=1) if yesterday else today
     today = date.today()
     return today - timedelta(days=1) if yesterday else today
 
@@ -446,6 +446,87 @@ def status():
         )
 
     butler_report("Current Standing", status_content, "here is your current standing:")
+
+
+@app.command()
+def streaks():
+    """Present distinguished achievements and streaks in proper conduct."""
+    ensure_store()
+    entries = load_entries()
+    streaks = calculate_streaks(entries)
+
+    # Build streaks content with butler's refined presentation
+    content = []
+
+    # Primary achievement streaks
+    content.append("🏆 [bold]Primary Achievements[/bold]")
+
+    if streaks["current_abstinence"] > 0:
+        days_text = "day" if streaks["current_abstinence"] == 1 else "days"
+        content.append(f"   📅 Current abstinence: [bold green]{streaks['current_abstinence']}[/] {days_text}")
+    else:
+        content.append("   📅 Current abstinence: [dim]Not abstaining today[/]")
+
+    if streaks["longest_abstinence"] > 0:
+        days_text = "day" if streaks["longest_abstinence"] == 1 else "days"
+        content.append(f"   🌟 Longest abstinence: [bold cyan]{streaks['longest_abstinence']}[/] {days_text}")
+
+    # Days under daily limit (moved from milestone tracking, renamed for positive framing)
+    if streaks["days_since_over_limit"] is not None:
+        if streaks["days_since_over_limit"] == 0:
+            content.append("   🍻 Days under daily limit: [yellow]Exceeded today[/]")
+        else:
+            days_text = "day" if streaks["days_since_over_limit"] == 1 else "days"
+            content.append(f"   🍻 Days under daily limit: [bold green]{streaks['days_since_over_limit']}[/] {days_text}")
+    else:
+        content.append("   🍻 Days under daily limit: [bold green]Never exceeded in past year[/]")
+
+    if streaks["current_compliance_weeks"] > 0:
+        weeks_text = "week" if streaks["current_compliance_weeks"] == 1 else "weeks"
+        content.append(f"   ✅ Current compliance: [bold green]{streaks['current_compliance_weeks']}[/] {weeks_text}")
+    else:
+        content.append("   ✅ Current compliance: [yellow]This week needs attention[/]")
+
+    if streaks["longest_compliance_weeks"] > 0:
+        weeks_text = "week" if streaks["longest_compliance_weeks"] == 1 else "weeks"
+        content.append(f"   🎖️  Best compliance run: [bold cyan]{streaks['longest_compliance_weeks']}[/] {weeks_text}")
+
+    content.append("")
+
+    # Special achievements (totals, not streaks)
+    content.append("🌟 [bold]Special Achievements (Total Counts)[/bold]")
+
+    content.append(f"   🏖️  Alcohol-free weekends: [bold cyan]{streaks['total_alcohol_free_weekends']}[/] weekend(s)")
+
+    if streaks["perfect_weeks"] > 0:
+        weeks_text = "week" if streaks["perfect_weeks"] == 1 else "weeks"
+        content.append(f"   ✨ Perfect weeks (zero drinking): [bold cyan]{streaks['perfect_weeks']}[/] {weeks_text}")
+    else:
+        content.append("   ✨ Perfect weeks: [dim]No completely abstinent weeks recorded[/]")
+
+    content.append("")
+
+    # Butler's assessment
+    content.append("💬 [bold]Butler's Assessment[/bold]")
+
+    if streaks["current_compliance_weeks"] >= 8:
+        content.append("   🎩 [bold green]Exemplary conduct! Your restraint brings me great pride.[/]")
+    elif streaks["current_compliance_weeks"] >= 4:
+        content.append("   🎩 [green]Commendable consistency in following the rules.[/]")
+    elif streaks["current_compliance_weeks"] >= 1:
+        content.append("   🎩 [green]Good progress in maintaining proper standards.[/]")
+    else:
+        content.append("   🎩 [yellow]Perhaps we might focus on establishing better patterns?[/]")
+
+    if streaks["longest_abstinence"] >= 30:
+        content.append("   🌟 [bold cyan]Your abstinence record demonstrates remarkable self-discipline![/]")
+    elif streaks["longest_abstinence"] >= 14:
+        content.append("   🌟 [cyan]Two weeks of abstinence - quite distinguished![/]")
+    elif streaks["longest_abstinence"] >= 7:
+        content.append("   🌟 [cyan]A full week of abstinence shows admirable restraint.[/]")
+
+    streaks_content = "\n".join(content)
+    butler_report("Achievement Record", streaks_content, "here are your distinguished achievements:")
 
 
 @app.command()

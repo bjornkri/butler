@@ -218,3 +218,199 @@ def summarize_month(entries: list[Entry], anchor: date) -> dict:
         "sober_days": sober_days,
         "total_days_recorded": len(month_entries),
     }
+
+
+def calculate_streaks(entries: list[Entry]) -> dict:
+    """Calculate various drinking and compliance streaks."""
+    if not entries:
+        return {
+            "current_abstinence": 0,
+            "longest_abstinence": 0,
+            "current_compliance_weeks": 0,
+            "longest_compliance_weeks": 0,
+            "days_since_over_limit": None,
+            "days_since_rule_violation": None,
+            "current_weekend_abstinence": 0,
+            "perfect_weeks": 0
+        }
+
+    today = date.today()
+    sorted_entries = sorted(entries, key=lambda e: e.day)
+
+    # Current abstinence streak (from today backwards)
+    current_abstinence = 0
+    check_date = today
+    while True:
+        entry = find_entry(entries, check_date)
+        if entry and entry.count is not None and entry.count > 0:
+            break
+        if entry and entry.count == 0:
+            current_abstinence += 1
+        elif entry is None and check_date <= today:
+            # No record, but could be abstinent - be conservative
+            pass
+        check_date -= timedelta(days=1)
+        if check_date < today - timedelta(days=365):  # Don't go back more than a year
+            break
+
+    # Longest abstinence streak (historical)
+    longest_abstinence = 0
+    temp_abstinence = 0
+    last_date = None
+
+    for entry in sorted_entries:
+        # Handle gaps in data
+        if last_date and (entry.day - last_date).days > 1:
+            temp_abstinence = 0  # Reset on data gaps
+
+        if entry.count is None or entry.count == 0:
+            temp_abstinence += 1
+            longest_abstinence = max(longest_abstinence, temp_abstinence)
+        else:
+            temp_abstinence = 0
+
+        last_date = entry.day
+
+    # Current compliance weeks streak
+    current_compliance_weeks = 0
+    current_week_start = today - timedelta(days=today.weekday())
+
+    for i in range(104):  # Check up to 2 years back
+        check_week_start = current_week_start - timedelta(days=7*i)
+        week_summary = summarize_week(entries, check_week_start)
+
+        # Only count weeks with recorded data
+        if week_summary["recorded_days"] > 0 and week_summary["rule_ok"]:
+            current_compliance_weeks += 1
+        else:
+            break
+
+    # Longest compliance weeks streak (historical)
+    longest_compliance_weeks = 0
+    temp_compliance = 0
+
+    # Go through all possible weeks
+    earliest_date = min(e.day for e in entries) if entries else today
+    week_start = earliest_date - timedelta(days=earliest_date.weekday())
+
+    while week_start <= today:
+        week_summary = summarize_week(entries, week_start)
+
+        if week_summary["recorded_days"] > 0 and week_summary["rule_ok"]:
+            temp_compliance += 1
+            longest_compliance_weeks = max(longest_compliance_weeks, temp_compliance)
+        else:
+            temp_compliance = 0
+
+        week_start += timedelta(days=7)
+
+    # Days since last over daily limit (>3 drinks)
+    days_since_over_limit = None
+    check_date = today
+    for i in range(365):  # Look back up to a year
+        entry = find_entry(entries, check_date)
+        if entry and entry.count is not None and entry.count > 3:
+            days_since_over_limit = i
+            break
+        check_date -= timedelta(days=1)
+
+    # Days since last rule violation
+    days_since_rule_violation = None
+    check_date = today
+    for i in range(365):
+        # Check if this week had any rule violations
+        week_start = check_date - timedelta(days=check_date.weekday())
+        week_summary = summarize_week(entries, week_start)
+
+        if week_summary["recorded_days"] > 0 and not week_summary["rule_ok"]:
+            days_since_rule_violation = i
+            break
+        check_date -= timedelta(days=1)
+
+    # Weekend abstinence streak (consecutive alcohol-free weekends)
+    weekend_abstinence_streak = 0
+
+    # Find the most recent completed weekend
+    # If today is Saturday or Sunday, look at this weekend; otherwise look at last weekend
+    today_weekday = today.weekday()  # Monday=0, Sunday=6
+
+    if today_weekday == 5:  # Saturday
+        # This weekend is current weekend
+        current_saturday = today
+    elif today_weekday == 6:  # Sunday
+        # This weekend is current weekend
+        current_saturday = today - timedelta(days=1)
+    else:
+        # Look at most recent completed weekend
+        days_back = today_weekday + 2  # How many days back to last Saturday
+        current_saturday = today - timedelta(days=days_back)
+
+    # Only look back for a reasonable number of weekends (52 weeks = 1 year)
+    max_weekends = 52
+    weekends_checked = 0
+
+    while weekends_checked < max_weekends and current_saturday >= (today - timedelta(days=365)):
+        # Check if this weekend was alcohol-free
+        saturday_entry = find_entry(entries, current_saturday)
+        sunday_entry = find_entry(entries, current_saturday + timedelta(days=1))
+
+        # Only count as alcohol-free if both days have explicit 0 counts (not missing data)
+        saturday_abstinent = saturday_entry and saturday_entry.count == 0
+        sunday_abstinent = sunday_entry and sunday_entry.count == 0
+
+        if saturday_abstinent and sunday_abstinent:
+            weekend_abstinence_streak += 1
+        else:
+            break
+
+        current_saturday -= timedelta(days=7)
+        weekends_checked += 1
+
+    # Total alcohol-free weekends (count all, not just consecutive)
+    total_alcohol_free_weekends = 0
+    if entries:
+        earliest_date = min(e.day for e in entries)
+        # Start from the first Saturday in our data range
+        first_saturday = earliest_date - timedelta(days=earliest_date.weekday()) + timedelta(days=5)
+        if first_saturday < earliest_date:
+            first_saturday += timedelta(days=7)
+
+        current_saturday = first_saturday
+        while current_saturday <= today:
+            saturday_entry = find_entry(entries, current_saturday)
+            sunday_entry = find_entry(entries, current_saturday + timedelta(days=1))
+
+            # Only count as alcohol-free if both days have explicit 0 counts
+            saturday_abstinent = saturday_entry and saturday_entry.count == 0
+            sunday_abstinent = sunday_entry and sunday_entry.count == 0
+
+            if saturday_abstinent and sunday_abstinent:
+                total_alcohol_free_weekends += 1
+
+            current_saturday += timedelta(days=7)
+
+    # Perfect weeks count (zero drinking days, full compliance)
+    perfect_weeks = 0
+    week_start = earliest_date - timedelta(days=earliest_date.weekday()) if entries else today
+
+    while week_start <= today:
+        week_summary = summarize_week(entries, week_start)
+
+        if (week_summary["recorded_days"] > 0 and
+            week_summary["drinking_days"] == 0 and
+            week_summary["rule_ok"]):
+            perfect_weeks += 1
+
+        week_start += timedelta(days=7)
+
+    return {
+        "current_abstinence": current_abstinence,
+        "longest_abstinence": longest_abstinence,
+        "current_compliance_weeks": current_compliance_weeks,
+        "longest_compliance_weeks": longest_compliance_weeks,
+        "days_since_over_limit": days_since_over_limit,
+        "days_since_rule_violation": days_since_rule_violation,
+        "weekend_abstinence_streak": weekend_abstinence_streak,
+        "total_alcohol_free_weekends": total_alcohol_free_weekends,
+        "perfect_weeks": perfect_weeks
+    }
