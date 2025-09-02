@@ -229,8 +229,7 @@ def calculate_streaks(entries: list[Entry]) -> dict:
             "current_compliance_weeks": 0,
             "longest_compliance_weeks": 0,
             "days_since_over_limit": None,
-            "days_since_rule_violation": None,
-            "current_weekend_abstinence": 0,
+            "total_alcohol_free_weekends": 0,
             "perfect_weeks": 0
         }
 
@@ -314,58 +313,6 @@ def calculate_streaks(entries: list[Entry]) -> dict:
             break
         check_date -= timedelta(days=1)
 
-    # Days since last rule violation
-    days_since_rule_violation = None
-    check_date = today
-    for i in range(365):
-        # Check if this week had any rule violations
-        week_start = check_date - timedelta(days=check_date.weekday())
-        week_summary = summarize_week(entries, week_start)
-
-        if week_summary["recorded_days"] > 0 and not week_summary["rule_ok"]:
-            days_since_rule_violation = i
-            break
-        check_date -= timedelta(days=1)
-
-    # Weekend abstinence streak (consecutive alcohol-free weekends)
-    weekend_abstinence_streak = 0
-
-    # Find the most recent completed weekend
-    # If today is Saturday or Sunday, look at this weekend; otherwise look at last weekend
-    today_weekday = today.weekday()  # Monday=0, Sunday=6
-
-    if today_weekday == 5:  # Saturday
-        # This weekend is current weekend
-        current_saturday = today
-    elif today_weekday == 6:  # Sunday
-        # This weekend is current weekend
-        current_saturday = today - timedelta(days=1)
-    else:
-        # Look at most recent completed weekend
-        days_back = today_weekday + 2  # How many days back to last Saturday
-        current_saturday = today - timedelta(days=days_back)
-
-    # Only look back for a reasonable number of weekends (52 weeks = 1 year)
-    max_weekends = 52
-    weekends_checked = 0
-
-    while weekends_checked < max_weekends and current_saturday >= (today - timedelta(days=365)):
-        # Check if this weekend was alcohol-free
-        saturday_entry = find_entry(entries, current_saturday)
-        sunday_entry = find_entry(entries, current_saturday + timedelta(days=1))
-
-        # Only count as alcohol-free if both days have explicit 0 counts (not missing data)
-        saturday_abstinent = saturday_entry and saturday_entry.count == 0
-        sunday_abstinent = sunday_entry and sunday_entry.count == 0
-
-        if saturday_abstinent and sunday_abstinent:
-            weekend_abstinence_streak += 1
-        else:
-            break
-
-        current_saturday -= timedelta(days=7)
-        weekends_checked += 1
-
     # Total alcohol-free weekends (count all, not just consecutive)
     total_alcohol_free_weekends = 0
     if entries:
@@ -409,8 +356,6 @@ def calculate_streaks(entries: list[Entry]) -> dict:
         "current_compliance_weeks": current_compliance_weeks,
         "longest_compliance_weeks": longest_compliance_weeks,
         "days_since_over_limit": days_since_over_limit,
-        "days_since_rule_violation": days_since_rule_violation,
-        "weekend_abstinence_streak": weekend_abstinence_streak,
         "total_alcohol_free_weekends": total_alcohol_free_weekends,
         "perfect_weeks": perfect_weeks
     }
