@@ -27,6 +27,45 @@ app = typer.Typer(
 console = Console()
 HAT = "🎩 "
 
+
+@app.callback(invoke_without_command=True)
+def main(ctx: typer.Context):
+    """A distinguished CLI butler for managing your libations with the Rule of 3."""
+    if ctx.invoked_subcommand is None:
+        # Show distinguished welcome when no command is provided
+        show_butler_welcome()
+
+
+def show_butler_welcome():
+    """Display a distinguished welcome message with available commands."""
+    welcome_text = """[bold]🎩 Good day! Your distinguished butler at your service.[/]
+
+[dim]I am here to assist you in maintaining proper conduct with the Rule of 3:[/]
+[cyan]• No more than 3 drinking days per week[/]
+[cyan]• No more than 3 drinks per day[/]  
+[cyan]• Always at least one day between drinking days[/]
+
+[bold]Available Commands:[/]
+[cyan]set <n>[/]     Record drinks for today
+[cyan]add <n>[/]     Add drinks to today's tally  
+[cyan]status[/]      View current standing
+[cyan]week[/]        Review this week's conduct
+[cyan]month[/]       Monthly compliance summary
+[cyan]edit[/]        Open records in editor
+[cyan]interactive[/] Launch interactive console"""
+    
+    panel = Panel(
+        welcome_text,
+        title="🎩 Butler",
+        title_align="left",
+        border_style="cyan",
+        padding=(1, 2)
+    )
+    
+    console.print(panel)
+    console.print("\n[dim]For detailed help on any command: [cyan]butler <command> --help[/][/]")
+
+
 # Butler's refined vocabulary
 DRINK_ICONS = {
     0: "✨",  # Sparkles for abstinence
