@@ -380,3 +380,87 @@ def calculate_streaks(entries: list[Entry]) -> dict:
         "total_alcohol_free_weekends": total_alcohol_free_weekends,
         "perfect_weeks": perfect_weeks
     }
+
+
+def get_nudge_status(entries: list[Entry]) -> dict:
+    """Determine if user needs a gentle nudge to update their records."""
+    today = date.today()
+
+    # Find most recent entry
+    recent_entries = [e for e in entries if e.day <= today]
+    if not recent_entries:
+        return {
+            "type": "first_time",
+            "message": "📝 Ready to start tracking?",
+            "style": "dim cyan"
+        }
+
+    latest_entry = max(recent_entries, key=lambda e: e.day)
+    days_since_update = (today - latest_entry.day).days
+
+    # Calculate current week progress
+    week_summary = summarize_week(entries, today)
+    week_start, week_end = week_bounds(today)
+
+    # Different nudge types based on situation
+    if days_since_update == 0:
+        # Updated today - show encouragement or streak info
+        streaks = calculate_streaks(entries)
+        if streaks["current_abstinence"] > 0:
+            return {
+                "type": "streak_active",
+                "message": f"🌟 {streaks['current_abstinence']}d streak",
+                "style": "bold green"
+            }
+        elif week_summary["rule_ok"]:
+            return {
+                "type": "compliant",
+                "message": f"✅ {week_summary['drinking_days']}/{3} this week",
+                "style": "green"
+            }
+        else:
+            return {
+                "type": "exceeded",
+                "message": "⚠️ Limits exceeded this week",
+                "style": "yellow"
+            }
+
+    elif days_since_update == 1:
+        # Missing today's entry
+        return {
+            "type": "today",
+            "message": "📝 No entry for today",
+            "style": "dim yellow"
+        }
+
+    elif days_since_update == 2:
+        # Missing today and yesterday
+        return {
+            "type": "yesterday",
+            "message": "📝 No entry for today or yesterday",
+            "style": "yellow"
+        }
+
+    elif days_since_update <= 3:
+        # Few days - mild nudge with specific count
+        return {
+            "type": "recent",
+            "message": f"📝 {days_since_update} days missing",
+            "style": "yellow"
+        }
+
+    elif days_since_update <= 7:
+        # Week - stronger nudge
+        return {
+            "type": "weekly",
+            "message": f"📝 {days_since_update} days behind",
+            "style": "red"
+        }
+
+    else:
+        # Long time - encouraging return
+        return {
+            "type": "welcome_back",
+            "message": f"📝 Welcome back! {days_since_update}d gap",
+            "style": "cyan"
+        }

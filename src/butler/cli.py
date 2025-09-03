@@ -16,6 +16,7 @@ from .storage import (
     calculate_streaks,
     ensure_store,
     find_entry,
+    get_nudge_status,
     load_entries,
     summarize_month,
     summarize_week,
@@ -39,6 +40,17 @@ def main(ctx: typer.Context):
 
 def show_butler_welcome():
     """Display a distinguished welcome message with available commands."""
+    # Get nudge status for unintrusive feedback
+    entries = load_entries()
+    nudge = get_nudge_status(entries)
+
+    # Add nudge indicator to title if relevant
+    title_suffix = ""
+    if nudge["type"] in ["today", "yesterday", "recent", "weekly", "welcome_back"]:
+        title_suffix = f" • {nudge['message']}"
+    elif nudge["type"] in ["streak_active", "compliant", "exceeded"]:
+        title_suffix = f" • {nudge['message']}"
+
     welcome_text = """[bold]🎩 Good day! Your distinguished butler at your service.[/]
 
 [dim]I am here to assist you in maintaining proper conduct with the Rule of 3:[/]
@@ -56,15 +68,22 @@ def show_butler_welcome():
 [cyan]edit[/]        Open records in editor
 [cyan]interactive[/] Launch interactive console"""
 
+    # Create panel with optional nudge in title
+    panel_title = f"🎩 Butler{title_suffix}"
     panel = Panel(
         welcome_text,
-        title="🎩 Butler",
+        title=panel_title,
         title_align="left",
         border_style="cyan",
         padding=(1, 2)
     )
 
     console.print(panel)
+
+    # Add nudge as separate line if it's important
+    if nudge["type"] in ["today", "yesterday", "recent", "weekly"]:
+        console.print(f"[{nudge['style']}]{nudge['message']}[/]")
+
     console.print("\n[dim]For detailed help on any command: [cyan]butler <command> --help[/][/]")
 
 
