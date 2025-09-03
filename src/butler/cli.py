@@ -319,19 +319,33 @@ def month(
         week_end = week["end"].strftime("%b %d")
         week_range = f"Week {i}: {week_start} - {week_end}"
 
+        # Check if this week includes today (incomplete week)
+        today = date.today()
+        is_current_week = week["start"] <= today <= week["end"]
+
         # Determine week status with proper distinction between no data and abstinence
         if week["recorded_days"] == 0:
             status = "📝 No Record"
             status_style = "dim"
             assessment = "No data recorded"
         elif week["drinking_days"] == 0:
-            status = "✨ Completely Sober"
-            status_style = "bold green"
-            assessment = "Magnificent abstinence!"
+            if is_current_week:
+                status = "✨ Sober So Far"
+                status_style = "green"
+                assessment = "Abstinent this week (in progress)"
+            else:
+                status = "✨ Completely Sober"
+                status_style = "bold green"
+                assessment = "Magnificent abstinence!"
         elif week["rule_ok"]:
-            status = "✅ Compliant"
-            status_style = "green"
-            assessment = "Within proper limits"
+            if is_current_week:
+                status = "✅ Compliant So Far"
+                status_style = "green"
+                assessment = "Following rules (week in progress)"
+            else:
+                status = "✅ Compliant"
+                status_style = "green"
+                assessment = "Within proper limits"
         else:
             status = "⚠️ Exceeded"
             status_style = "yellow"
@@ -345,11 +359,38 @@ def month(
     month_name = month_data["month_start"].strftime("%B %Y")
     total_weeks = len(month_data["weeks"])
     no_record_weeks = sum(1 for w in month_data["weeks"] if w["recorded_days"] == 0)
-    sober_weeks = sum(
-        1
-        for w in month_data["weeks"]
-        if w["recorded_days"] > 0 and w["drinking_days"] == 0
-    )
+
+    # Check if this is the current month for proper counting
+    today = date.today()
+    month_start = month_data["month_start"]
+    is_current_month = month_start.year == today.year and month_start.month == today.month
+
+    # Count weeks with proper distinction for current/incomplete weeks
+    completed_sober_weeks = 0
+    sober_so_far_weeks = 0
+    completed_compliant_weeks = 0
+    compliant_so_far_weeks = 0
+
+    for w in month_data["weeks"]:
+        if w["recorded_days"] == 0:
+            continue
+
+        # Check if this week includes today (incomplete week)
+        is_current_week = w["start"] <= today <= w["end"]
+
+        if w["drinking_days"] == 0:
+            if is_current_week:
+                sober_so_far_weeks += 1
+            else:
+                completed_sober_weeks += 1
+        elif w["rule_ok"]:
+            if is_current_week:
+                compliant_so_far_weeks += 1
+            else:
+                completed_compliant_weeks += 1
+
+    # Total counts for legacy compatibility
+    sober_weeks = completed_sober_weeks + sober_so_far_weeks
     compliant_weeks = sum(
         1 for w in month_data["weeks"] if w["recorded_days"] > 0 and w["rule_ok"]
     )
@@ -359,29 +400,63 @@ def month(
 
     # Calculate overall month status
     recorded_weeks = total_weeks - no_record_weeks
+
+    # Check if this is the current month (incomplete)
+    today = date.today()
+    month_start = month_data["month_start"]
+    is_current_month = month_start.year == today.year and month_start.month == today.month
+
     if recorded_weeks == 0:
         month_status = "📝 No Records Available"
         month_style = "dim"
     elif sober_weeks == recorded_weeks:
-        month_status = "✨ Completely Abstinent Month"
-        month_style = "bold green"
+        if is_current_month:
+            month_status = "✨ Abstinent So Far"
+            month_style = "bold green"
+        else:
+            month_status = "✨ Completely Abstinent Month"
+            month_style = "bold green"
     elif exceeded_weeks == 0 and recorded_weeks > 0:
-        month_status = "✅ Fully Compliant Month"
-        month_style = "green"
+        if is_current_month:
+            month_status = "✅ Compliant So Far"
+            month_style = "green"
+        else:
+            month_status = "✅ Fully Compliant Month"
+            month_style = "green"
     else:
-        month_status = "⚠️ Mixed Compliance Month"
-        month_style = "yellow"
+        if is_current_month:
+            month_status = "⚠️ Mixed Month (So Far)"
+            month_style = "yellow"
+        else:
+            month_status = "⚠️ Mixed Compliance Month"
+            month_style = "yellow"
 
     days_text = "day" if month_data["total_drinking_days"] == 1 else "days"
     drinks_text = "beverage" if month_data["total_drinks"] == 1 else "beverages"
 
+    # Build weekly breakdown text with proper distinction
+    weekly_breakdown = f"📊 Weekly breakdown:\n"
+    weekly_breakdown += f"   📝 No records: [bold]{no_record_weeks}[/] week(s)\n"
+
+    if completed_sober_weeks > 0:
+        weekly_breakdown += f"   ✨ Completely sober: [bold]{completed_sober_weeks}[/] week(s)\n"
+    if sober_so_far_weeks > 0:
+        weekly_breakdown += f"   ✨ Sober so far: [bold]{sober_so_far_weeks}[/] week(s)\n"
+
+    # Calculate compliant drinking weeks (excluding sober weeks)
+    non_sober_compliant = completed_compliant_weeks - completed_sober_weeks
+    non_sober_compliant_so_far = compliant_so_far_weeks - sober_so_far_weeks
+
+    if non_sober_compliant > 0:
+        weekly_breakdown += f"   ✅ Compliant drinking: [bold]{non_sober_compliant}[/] week(s)\n"
+    if non_sober_compliant_so_far > 0:
+        weekly_breakdown += f"   ✅ Compliant so far: [bold]{non_sober_compliant_so_far}[/] week(s)\n"
+
+    weekly_breakdown += f"   ⚠️ Exceeded limits: [bold]{exceeded_weeks}[/] week(s)"
+
     summary = (
         f"[bold]{month_name}[/] - {month_status}\n\n"
-        f"📊 Weekly breakdown:\n"
-        f"   📝 No records: [bold]{no_record_weeks}[/] week(s)\n"
-        f"   ✨ Completely sober: [bold]{sober_weeks}[/] week(s)\n"
-        f"   ✅ Compliant drinking: [bold]{compliant_weeks - sober_weeks}[/] week(s)\n"
-        f"   ⚠️ Exceeded limits: [bold]{exceeded_weeks}[/] week(s)\n\n"
+        f"{weekly_breakdown}\n\n"
         f"🍷 Monthly totals:\n"
         f"   Drinking occasions: [bold]{month_data['total_drinking_days']}[/] {days_text}\n"
         f"   Total consumption: [bold]{month_data['total_drinks']}[/] {drinks_text}\n"
@@ -434,14 +509,14 @@ def status():
     status_content = (
         f"📅 Today's tally: [bold]{today_status}[/]\n"
         f"📰 Yesterday's record: [bold]{yest_status}[/]\n"
-        f"📊 This week: [bold]{week['drinking_days']}[/] drinking {day_word}, [bold]{week['total_drinks']}[/] total {drink_word}\n\n"
+        f"📊 This week so far: [bold]{week['drinking_days']}[/] drinking {day_word}, [bold]{week['total_drinks']}[/] total {drink_word}\n\n"
     )
 
     if week["rule_ok"]:
-        status_content += "🎖️  [green]Exemplary adherence to proper limits! Most commendable.[/]"
+        status_content += "🎖️  [green]This week: Exemplary adherence to proper limits! Most commendable.[/]"
     else:
         status_content += (
-            "🧐 [yellow]I must respectfully note we've exceeded recommended bounds this week.[/]\n"
+            "🧐 [yellow]This week: I must respectfully note we've exceeded recommended bounds.[/]\n"
             "    [dim]Perhaps we might consider a more temperate approach going forward?[/]"
         )
 
@@ -463,9 +538,9 @@ def streaks():
 
     if streaks["current_abstinence"] > 0:
         days_text = "day" if streaks["current_abstinence"] == 1 else "days"
-        content.append(f"   📅 Current abstinence: [bold green]{streaks['current_abstinence']}[/] {days_text}")
+        content.append(f"   📅 Abstinence streak: [bold green]{streaks['current_abstinence']}[/] {days_text} [dim](completed days)[/]")
     else:
-        content.append("   📅 Current abstinence: [dim]Not abstaining today[/]")
+        content.append("   📅 Abstinence streak: [dim]Reset (drinking today or yesterday)[/]")
 
     if streaks["longest_abstinence"] > 0:
         days_text = "day" if streaks["longest_abstinence"] == 1 else "days"
@@ -483,9 +558,9 @@ def streaks():
 
     if streaks["current_compliance_weeks"] > 0:
         weeks_text = "week" if streaks["current_compliance_weeks"] == 1 else "weeks"
-        content.append(f"   ✅ Current compliance: [bold green]{streaks['current_compliance_weeks']}[/] {weeks_text}")
+        content.append(f"   ✅ Compliance streak: [bold green]{streaks['current_compliance_weeks']}[/] {weeks_text} [dim](completed weeks)[/]")
     else:
-        content.append("   ✅ Current compliance: [yellow]This week needs attention[/]")
+        content.append("   ✅ Compliance streak: [yellow]Reset (this week or last week violated rules)[/]")
 
     if streaks["longest_compliance_weeks"] > 0:
         weeks_text = "week" if streaks["longest_compliance_weeks"] == 1 else "weeks"

@@ -236,21 +236,28 @@ def calculate_streaks(entries: list[Entry]) -> dict:
     today = date.today()
     sorted_entries = sorted(entries, key=lambda e: e.day)
 
-    # Current abstinence streak (from today backwards)
+    # Current abstinence streak (break immediately if drinking today, otherwise count completed days)
     current_abstinence = 0
-    check_date = today
-    while True:
-        entry = find_entry(entries, check_date)
-        if entry and entry.count is not None and entry.count > 0:
-            break
-        if entry and entry.count == 0:
-            current_abstinence += 1
-        elif entry is None and check_date <= today:
-            # No record, but could be abstinent - be conservative
-            pass
-        check_date -= timedelta(days=1)
-        if check_date < today - timedelta(days=365):  # Don't go back more than a year
-            break
+    today_entry = find_entry(entries, today)
+
+    # If drinking today, streak is broken (0)
+    if today_entry and today_entry.count is not None and today_entry.count > 0:
+        current_abstinence = 0
+    else:
+        # Count completed abstinent days (from yesterday backwards)
+        check_date = today - timedelta(days=1)  # Start from yesterday
+        while True:
+            entry = find_entry(entries, check_date)
+            if entry and entry.count is not None and entry.count > 0:
+                break
+            if entry and entry.count == 0:
+                current_abstinence += 1
+            elif entry is None and check_date <= today - timedelta(days=1):
+                # No record, but could be abstinent - be conservative
+                pass
+            check_date -= timedelta(days=1)
+            if check_date < today - timedelta(days=365):  # Don't go back more than a year
+                break
 
     # Longest abstinence streak (historical)
     longest_abstinence = 0
@@ -270,29 +277,38 @@ def calculate_streaks(entries: list[Entry]) -> dict:
 
         last_date = entry.day
 
-    # Current compliance weeks streak
+    # Current compliance weeks streak (break immediately if this week non-compliant, otherwise count completed weeks)
     current_compliance_weeks = 0
     current_week_start = today - timedelta(days=today.weekday())
+    current_week_summary = summarize_week(entries, current_week_start)
 
-    for i in range(104):  # Check up to 2 years back
-        check_week_start = current_week_start - timedelta(days=7*i)
-        week_summary = summarize_week(entries, check_week_start)
+    # If this week is already non-compliant, streak is broken (0)
+    if current_week_summary["recorded_days"] > 0 and not current_week_summary["rule_ok"]:
+        current_compliance_weeks = 0
+    else:
+        # Count completed compliant weeks (from last week backwards)
+        last_completed_week_start = today - timedelta(days=today.weekday() + 7)
 
-        # Only count weeks with recorded data
-        if week_summary["recorded_days"] > 0 and week_summary["rule_ok"]:
-            current_compliance_weeks += 1
-        else:
-            break
+        for i in range(104):  # Check up to 2 years back
+            check_week_start = last_completed_week_start - timedelta(days=7*i)
+            week_summary = summarize_week(entries, check_week_start)
 
-    # Longest compliance weeks streak (historical)
+            # Only count weeks with recorded data
+            if week_summary["recorded_days"] > 0 and week_summary["rule_ok"]:
+                current_compliance_weeks += 1
+            else:
+                break
+
+    # Longest compliance weeks streak (historical) - only count completed weeks
     longest_compliance_weeks = 0
     temp_compliance = 0
 
-    # Go through all possible weeks
+    # Go through all possible completed weeks (exclude current week)
     earliest_date = min(e.day for e in entries) if entries else today
     week_start = earliest_date - timedelta(days=earliest_date.weekday())
+    last_completed_week = today - timedelta(days=today.weekday() + 7)
 
-    while week_start <= today:
+    while week_start <= last_completed_week:
         week_summary = summarize_week(entries, week_start)
 
         if week_summary["recorded_days"] > 0 and week_summary["rule_ok"]:
@@ -336,19 +352,24 @@ def calculate_streaks(entries: list[Entry]) -> dict:
 
             current_saturday += timedelta(days=7)
 
-    # Perfect weeks count (zero drinking days, full compliance)
+    # Perfect weeks count (zero drinking days, full compliance) - only completed weeks
     perfect_weeks = 0
-    week_start = earliest_date - timedelta(days=earliest_date.weekday()) if entries else today
+    if entries:
+        earliest_date = min(e.day for e in entries)
+        # Start from the first Monday in our data range
+        week_start = earliest_date - timedelta(days=earliest_date.weekday())
+        # Stop at last completed week (not current week)
+        last_completed_week = today - timedelta(days=today.weekday() + 7)
 
-    while week_start <= today:
-        week_summary = summarize_week(entries, week_start)
+        while week_start <= last_completed_week:
+            week_summary = summarize_week(entries, week_start)
 
-        if (week_summary["recorded_days"] > 0 and
-            week_summary["drinking_days"] == 0 and
-            week_summary["rule_ok"]):
-            perfect_weeks += 1
+            if (week_summary["recorded_days"] > 0 and
+                week_summary["drinking_days"] == 0 and
+                week_summary["rule_ok"]):
+                perfect_weeks += 1
 
-        week_start += timedelta(days=7)
+            week_start += timedelta(days=7)
 
     return {
         "current_abstinence": current_abstinence,
