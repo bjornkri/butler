@@ -255,22 +255,33 @@ class InsightPanel(Static):
         if week_data["total_drinks"] <= 3 and week_data["drinking_days"] > 0:
             insights.append("• 🏆 Stayed within moderate consumption")
 
-        # Weekend behavior analysis
+        # Weekend behavior analysis (only show if weekend is complete)
         friday = week_start + timedelta(days=4)
         saturday = week_start + timedelta(days=5)
         sunday = week_start + timedelta(days=6)
+        today = date.today()
 
         entries = load_entries()
         weekend_days = 0
+        weekend_entries_count = 0
+        
         for day in [friday, saturday, sunday]:
             entry = find_entry(entries, day)
-            if entry and entry.count and entry.count > 0:
-                weekend_days += 1
+            if entry is not None:
+                weekend_entries_count += 1
+                if entry.count and entry.count > 0:
+                    weekend_days += 1
 
-        if weekend_days == 0:
-            insights.append("• 🌟 Alcohol-free weekend")
-        elif weekend_days <= 1:
-            insights.append("• ✅ Restrained weekend conduct")
+        # Only show weekend insights if:
+        # 1. We're past Sunday (weekend is complete), OR
+        # 2. All weekend days have entries (user has recorded all weekend data)
+        weekend_complete = today > sunday or weekend_entries_count == 3
+        
+        if weekend_complete:
+            if weekend_days == 0:
+                insights.append("• 🌟 Alcohol-free weekend")
+            elif weekend_days <= 1:
+                insights.append("• ✅ Restrained weekend conduct")
 
         return "\n".join(insights) if insights else "• Standard week pattern"
 
